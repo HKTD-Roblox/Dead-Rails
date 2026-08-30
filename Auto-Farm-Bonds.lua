@@ -270,14 +270,12 @@ local function setStatus(statusString)
 end
 
 local function isPlayerInLobby()
-    if workspace:FindFirstChild("Lobby") or workspace:FindFirstChild("LobbyMap") or workspace:FindFirstChild("Spawns") then
+    if workspace:FindFirstChild("Lobby") or workspace:FindFirstChild("LobbyMap") or workspace:FindFirstChild("LobbySpawn") then
         return true
     end
-    for _, v in ipairs(workspace:GetChildren()) do
-        local lowerName = string.lower(v.Name)
-        if string.find(lowerName, "lobby") or string.find(lowerName, "waiting") then
-            return true
-        end
+    local gui = LocalPlayer:FindFirstChild("PlayerGui")
+    if gui and (gui:FindFirstChild("LobbyGui") or gui:FindFirstChild("MainMenu")) then
+        return true
     end
     return false
 end
@@ -287,50 +285,50 @@ local function enterSoloGame()
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
     local hrp = char.HumanoidRootPart
 
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") then
-            local nameLower = string.lower(obj.Name)
-            local parentNameLower = obj.Parent and string.lower(obj.Parent.Name) or ""
-            
-            if string.find(nameLower, "solo") or string.find(nameLower, "1/1") or string.find(nameLower, "play") or string.find(parentNameLower, "solo") or string.find(parentNameLower, "play") then
-                hrp.CFrame = obj.CFrame + Vector3.new(0, 3, 0)
-                
-                local touch = obj:FindFirstChildWhichIsA("TouchTransmitter", true)
-                if touch then
-                    firetouchinterest(hrp, obj, 0)
-                    task.wait(0.1)
-                    firetouchinterest(hrp, obj, 1)
-                end
-                
-                local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true) or (obj.Parent and obj.Parent:FindFirstChildWhichIsA("ProximityPrompt", true))
-                if prompt then
-                    fireproximityprompt(prompt)
-                end
+    local soloDoor = nil
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("BasePart") then
+            local n = string.lower(v.Name)
+            local pN = v.Parent and string.lower(v.Parent.Name) or ""
+            if (string.find(n, "solo") or string.find(n, "1/1") or string.find(pN, "solo") or string.find(pN, "1/1")) and not string.find(n, "gui") then
+                soloDoor = v
                 break
             end
         end
     end
+
+    if soloDoor then
+        hrp.CFrame = soloDoor.CFrame + Vector3.new(0, 3, 0)
+        local prompt = soloDoor:FindFirstChildWhichIsA("ProximityPrompt", true) or (soloDoor.Parent and soloDoor.Parent:FindFirstChildWhichIsA("ProximityPrompt", true))
+        if prompt then
+            fireproximityprompt(prompt)
+        end
+        local touch = soloDoor:FindFirstChildWhichIsA("TouchTransmitter", true)
+        if touch then
+            firetouchinterest(hrp, soloDoor, 0)
+            task.wait(0.1)
+            firetouchinterest(hrp, soloDoor, 1)
+        end
+    end
 end
 
-local function scanValidBonds()
-    local validBonds = {}
+local function getSingleBond()
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj.Parent then
+        if obj and obj.Parent then
             local nameLower = string.lower(obj.Name)
             if string.find(nameLower, "bond") then
                 local mainObj = obj
                 if obj:IsA("BasePart") and obj.Parent and obj.Parent:IsA("Model") and string.find(string.lower(obj.Parent.Name), "bond") then
                     mainObj = obj.Parent
                 end
-                
                 local part = mainObj:IsA("BasePart") and mainObj or mainObj:FindFirstChildWhichIsA("BasePart", true)
-                if part and not validBonds[mainObj] then
-                    validBonds[mainObj] = part
+                if part then
+                    return mainObj, part
                 end
             end
         end
     end
-    return validBonds
+    return nil, nil
 end
 
 local function moveBondToPlayer(bondObj, bondPart)
@@ -338,7 +336,7 @@ local function moveBondToPlayer(bondObj, bondPart)
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
     
     local cam = workspace.CurrentCamera
-    local targetPos = cam.CFrame.Position + (cam.CFrame.LookVector * 1.8)
+    local targetPos = cam.CFrame.Position + (cam.CFrame.LookVector * 1.5)
     local targetCFrame = CFrame.new(targetPos)
 
     if bondObj:IsA("Model") then
@@ -358,7 +356,7 @@ local function moveBondToPlayer(bondObj, bondPart)
     local touch = bondPart:FindFirstChildWhichIsA("TouchTransmitter", true)
     if touch then
         firetouchinterest(char.HumanoidRootPart, bondPart, 0)
-        task.wait(0.05)
+        task.wait(0.02)
         firetouchinterest(char.HumanoidRootPart, bondPart, 1)
     end
 end
@@ -374,44 +372,22 @@ local function startAutoFarm()
             isTimerRunning = true
             setStatus("Status: Getting All Bonds...")
 
-            local bondsMap = scanValidBonds()
-            local foundAny = false
+            local bondObj, bondPart = getSingleBond()
 
-            for bondObj, bondPart in pairs(bondsMap) do
-                if bondObj and bondObj.Parent then
-                    foundAny = true
-                    local attempts = 0
-                    local collected = false
-
-                    while bondObj and bondObj.Parent and attempts < 40 do
-                        moveBondToPlayer(bondObj, bondPart)
-                        task.wait(0.05)
-                        attempts = attempts + 1
-                    end
-
-                    if not (bondObj and bondObj.Parent) then
-                        collected = true
-                    end
-
-                    if collected then
-                        bondCount = bondCount + 1
-                        BondsText.Text = string.format("Bonds: %02d", bondCount)
-                    end
+            if bondObj and bondPart then
+                while bondObj and bondObj.Parent and not isPlayerInLobby() do
+                    moveBondToPlayer(bondObj, bondPart)
+                    task.wait(0.03)
                 end
-            end
 
-            if not foundAny then
+                if not (bondObj and bondObj.Parent) then
+                    bondCount = bondCount + 1
+                    BondsText.Text = string.format("Bonds: %02d", bondCount)
+                end
+            else
                 task.wait(0.5)
-                local recheckMap = scanValidBonds()
-                local recheckFound = false
-                for obj, _ in pairs(recheckMap) do
-                    if obj and obj.Parent then
-                        recheckFound = true
-                        break
-                    end
-                end
-
-                if not recheckFound then
+                local checkObj, checkPart = getSingleBond()
+                if not checkObj then
                     setStatus("Status: All Bonds Collected! Teleporting to the Lobby...")
                     isTimerRunning = false
                     task.wait(1)
