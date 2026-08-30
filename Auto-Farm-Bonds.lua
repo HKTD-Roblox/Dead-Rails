@@ -274,10 +274,13 @@ local function isPlayerInLobby()
         return true
     end
     local gui = LocalPlayer:FindFirstChild("PlayerGui")
-    if gui and (gui:FindFirstChild("LobbyGui") or gui:FindFirstChild("MainMenu")) then
+    if gui and (gui:FindFirstChild("LobbyGui") or gui:FindFirstChild("MainMenu") or gui:FindFirstChild("Lobby")) then
         return true
     end
-    return false
+    if workspace:FindFirstChild("Map") or workspace:FindFirstChild("Game") or workspace:FindFirstChild("Items") or workspace:FindFirstChild("Bonds") then
+        return false
+    end
+    return true
 end
 
 local function enterSoloGame()
@@ -285,34 +288,46 @@ local function enterSoloGame()
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
     local hrp = char.HumanoidRootPart
 
-    local soloDoor = nil
+    local soloTarget = nil
+
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("ProximityPrompt") then
+            local pName = string.lower(v.ObjectText .. " " .. v.ActionText)
+            local parentName = v.Parent and string.lower(v.Parent.Name) or ""
+            if string.find(pName, "solo") or string.find(pName, "1/1") or string.find(pName, "play") or string.find(parentName, "solo") or string.find(parentName, "1/1") then
+                fireproximityprompt(v)
+                return
+            end
+        end
+    end
+
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") then
             local n = string.lower(v.Name)
             local pN = v.Parent and string.lower(v.Parent.Name) or ""
             if (string.find(n, "solo") or string.find(n, "1/1") or string.find(pN, "solo") or string.find(pN, "1/1")) and not string.find(n, "gui") then
-                soloDoor = v
+                soloTarget = v
                 break
             end
         end
     end
 
-    if soloDoor then
-        hrp.CFrame = soloDoor.CFrame + Vector3.new(0, 3, 0)
-        local prompt = soloDoor:FindFirstChildWhichIsA("ProximityPrompt", true) or (soloDoor.Parent and soloDoor.Parent:FindFirstChildWhichIsA("ProximityPrompt", true))
+    if soloTarget then
+        hrp.CFrame = soloTarget.CFrame + Vector3.new(0, 3, 0)
+        local prompt = soloTarget:FindFirstChildWhichIsA("ProximityPrompt", true) or (soloTarget.Parent and soloTarget.Parent:FindFirstChildWhichIsA("ProximityPrompt", true))
         if prompt then
             fireproximityprompt(prompt)
         end
-        local touch = soloDoor:FindFirstChildWhichIsA("TouchTransmitter", true)
+        local touch = soloTarget:FindFirstChildWhichIsA("TouchTransmitter", true)
         if touch then
-            firetouchinterest(hrp, soloDoor, 0)
-            task.wait(0.1)
-            firetouchinterest(hrp, soloDoor, 1)
+            firetouchinterest(hrp, soloTarget, 0)
+            task.wait(0.05)
+            firetouchinterest(hrp, soloTarget, 1)
         end
     end
 end
 
-local function getSingleBond()
+local function scanForSingleBond()
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj and obj.Parent then
             local nameLower = string.lower(obj.Name)
@@ -321,6 +336,7 @@ local function getSingleBond()
                 if obj:IsA("BasePart") and obj.Parent and obj.Parent:IsA("Model") and string.find(string.lower(obj.Parent.Name), "bond") then
                     mainObj = obj.Parent
                 end
+                
                 local part = mainObj:IsA("BasePart") and mainObj or mainObj:FindFirstChildWhichIsA("BasePart", true)
                 if part then
                     return mainObj, part
@@ -362,7 +378,8 @@ local function moveBondToPlayer(bondObj, bondPart)
 end
 
 local function startAutoFarm()
-    while task.wait(0.1) do
+    while true do
+        task.wait(0.1)
         if isPlayerInLobby() then
             isTimerRunning = false
             setStatus("Status: Joining the Game...")
@@ -372,7 +389,7 @@ local function startAutoFarm()
             isTimerRunning = true
             setStatus("Status: Getting All Bonds...")
 
-            local bondObj, bondPart = getSingleBond()
+            local bondObj, bondPart = scanForSingleBond()
 
             if bondObj and bondPart then
                 while bondObj and bondObj.Parent and not isPlayerInLobby() do
@@ -385,14 +402,24 @@ local function startAutoFarm()
                     BondsText.Text = string.format("Bonds: %02d", bondCount)
                 end
             else
-                task.wait(0.5)
-                local checkObj, checkPart = getSingleBond()
-                if not checkObj then
+                local emptyScanCount = 0
+                for i = 1, 3 do
+                    task.wait(0.3)
+                    local checkObj, _ = scanForSingleBond()
+                    if not checkObj then
+                        emptyScanCount = emptyScanCount + 1
+                    end
+                end
+
+                if emptyScanCount >= 3 and not isPlayerInLobby() then
                     setStatus("Status: All Bonds Collected! Teleporting to the Lobby...")
                     isTimerRunning = false
                     task.wait(1)
                     TeleportService:Teleport(116495829188952, LocalPlayer)
-                    break
+                    
+                    repeat
+                        task.wait(0.5)
+                    until isPlayerInLobby()
                 end
             end
         end
