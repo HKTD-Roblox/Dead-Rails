@@ -4,10 +4,12 @@ local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TeleportService = game:GetService("TeleportService")
 local CoreGui = game:GetService("CoreGui")
-
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
 
-if game.PlaceId ~= 116495829188952 then
+local TARGET_PLACE = 116495829188952
+if game.PlaceId ~= TARGET_PLACE then
     LocalPlayer:Kick("This script can only be used in Dead Rails.")
     return
 end
@@ -15,11 +17,12 @@ end
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "HKTDRoblox_DeadRails"
 ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = (CoreGui:FindFirstChild("RobloxGui") or CoreGui)
 
 local function makeCorner(parent, radius)
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim2.new(0, radius)
+    corner.CornerRadius = UDim.new(0, radius)
     corner.Parent = parent
     return corner
 end
@@ -44,7 +47,6 @@ local function addGlowEffect(frame, strokeColor)
     glow.ScaleType = Enum.ScaleType.Slice
     glow.SliceCenter = Rect.new(24, 24, 276, 276)
     glow.Parent = frame
-
     task.spawn(function()
         while frame and frame.Parent do
             TweenService:Create(glow, TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {ImageTransparency = 0.2}):Play()
@@ -233,23 +235,20 @@ local function handleDiscordCopy(btn)
     end
     btn.Text = "Link Copied!"
     task.delay(2, function()
-        btn.Text = "Copy Discord"
+        if btn and btn.Parent then
+            btn.Text = "Copy Discord"
+        end
     end)
 end
 
 CopyBtn.MouseButton1Click:Connect(function() handleDiscordCopy(CopyBtn) end)
 CreditCopyBtn.MouseButton1Click:Connect(function() handleDiscordCopy(CreditCopyBtn) end)
-
-CreditBtn.MouseButton1Click:Connect(function()
-    CreditFrame.Visible = true
-end)
-
-CreditOkBtn.MouseButton1Click:Connect(function()
-    CreditFrame.Visible = false
-end)
+CreditBtn.MouseButton1Click:Connect(function() CreditFrame.Visible = true end)
+CreditOkBtn.MouseButton1Click:Connect(function() CreditFrame.Visible = false end)
 
 local elapsedSeconds = 0
 local isTimerRunning = false
+local bondCount = 0
 
 task.spawn(function()
     while true do
@@ -264,164 +263,444 @@ task.spawn(function()
     end
 end)
 
-local bondCount = 0
-local function setStatus(statusString)
-    StatusText.Text = statusString
+local function setStatus(s)
+    StatusText.Text = s
+end
+
+local function getChar()
+    return LocalPlayer.Character
+end
+
+local function getHRP()
+    local c = getChar()
+    return c and c:FindFirstChild("HumanoidRootPart")
+end
+
+local function getHum()
+    local c = getChar()
+    return c and c:FindFirstChildOfClass("Humanoid")
+end
+
+local JOIN_KEYWORDS = {
+    "solo", "1/1", "1 / 1", "play", "start", "join", "ready", "go", "begin",
+    "create", "quick", "match", "deploy", "embark", "board", "enter"
+}
+
+local BOND_KEYWORDS = {
+    "bond", "bonds", "cashbond", "bondpickup", "bonditem", "collectbond"
+}
+
+local COLLECT_KEYWORDS = {
+    "collect", "pick", "take", "grab", "loot", "claim"
+}
+
+local function textHasAny(str, list)
+    str = string.lower(tostring(str or ""))
+    for _, k in ipairs(list) do
+        if string.find(str, k, 1, true) then
+            return true
+        end
+    end
+    return false
+end
+
+local function safeFirePrompt(prompt)
+    if not prompt then return false end
+    local ok = false
+    pcall(function()
+        if fireproximityprompt then
+            fireproximityprompt(prompt)
+            ok = true
+        end
+    end)
+    pcall(function()
+        if fireproximityprompt then
+            fireproximityprompt(prompt, 1)
+            ok = true
+        end
+    end)
+    pcall(function()
+        prompt.HoldDuration = 0
+        prompt.MaxActivationDistance = 999
+        prompt.RequiresLineOfSight = false
+        if fireproximityprompt then
+            fireproximityprompt(prompt)
+            ok = true
+        end
+    end)
+    return ok
+end
+
+local function safeTouch(part)
+    local hrp = getHRP()
+    if not hrp or not part then return end
+    pcall(function()
+        if firetouchinterest then
+            firetouchinterest(hrp, part, 0)
+            task.wait(0.03)
+            firetouchinterest(hrp, part, 1)
+        end
+    end)
+end
+
+local function clickGuiButton(btn)
+    if not btn then return end
+    pcall(function()
+        if firesignal then
+            if btn.MouseButton1Click then firesignal(btn.MouseButton1Click) end
+            if btn.Activated then firesignal(btn.Activated) end
+            if btn.MouseButton1Down then firesignal(btn.MouseButton1Down) end
+            if btn.MouseButton1Up then firesignal(btn.MouseButton1Up) end
+        end
+    end)
+    pcall(function()
+        if btn.Activate then btn:Activate() end
+    end)
 end
 
 local function isPlayerInLobby()
-    if workspace:FindFirstChild("Lobby") or workspace:FindFirstChild("LobbyMap") or workspace:FindFirstChild("LobbySpawn") then
-        return true
+    local score = 0
+    if workspace:FindFirstChild("Lobby") then score += 2 end
+    if workspace:FindFirstChild("LobbyMap") then score += 2 end
+    if workspace:FindFirstChild("LobbySpawn") then score += 2 end
+    if workspace:FindFirstChild("Menu") then score += 1 end
+    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+    if pg then
+        for _, n in ipairs({"LobbyGui", "MainMenu", "Lobby", "Menu", "TitleScreen", "PlayGui", "StartGui"}) do
+            if pg:FindFirstChild(n, true) then score += 2 end
+        end
     end
-    local gui = LocalPlayer:FindFirstChild("PlayerGui")
-    if gui and (gui:FindFirstChild("LobbyGui") or gui:FindFirstChild("MainMenu") or gui:FindFirstChild("Lobby")) then
-        return true
+    if workspace:FindFirstChild("RuntimeItems") then score -= 3 end
+    if workspace:FindFirstChild("Map") then score -= 2 end
+    if workspace:FindFirstChild("Game") then score -= 2 end
+    if workspace:FindFirstChild("Train") then score -= 2 end
+    if workspace:FindFirstChild("Bonds") then score -= 2 end
+    for _, o in ipairs(workspace:GetChildren()) do
+        if o:IsA("Model") and o:GetAttribute("serverEntityId") then
+            score -= 2
+            break
+        end
     end
-    if workspace:FindFirstChild("Map") or workspace:FindFirstChild("Game") or workspace:FindFirstChild("Items") or workspace:FindFirstChild("Bonds") then
-        return false
-    end
-    return true
+    return score > 0
 end
 
-local function enterSoloGame()
-    local char = LocalPlayer.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-    local hrp = char.HumanoidRootPart
-
-    local soloTarget = nil
-
+local function findJoinPrompts()
+    local found = {}
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("ProximityPrompt") then
-            local pName = string.lower(v.ObjectText .. " " .. v.ActionText)
-            local parentName = v.Parent and string.lower(v.Parent.Name) or ""
-            if string.find(pName, "solo") or string.find(pName, "1/1") or string.find(pName, "play") or string.find(parentName, "solo") or string.find(parentName, "1/1") then
-                fireproximityprompt(v)
-                return
+            local blob = string.lower(tostring(v.ObjectText) .. " " .. tostring(v.ActionText) .. " " .. tostring(v.Name) .. " " .. tostring(v.Parent and v.Parent.Name))
+            if textHasAny(blob, JOIN_KEYWORDS) then
+                table.insert(found, v)
             end
         end
     end
+    return found
+end
 
+local function findJoinParts()
+    local found = {}
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") then
             local n = string.lower(v.Name)
-            local pN = v.Parent and string.lower(v.Parent.Name) or ""
-            if (string.find(n, "solo") or string.find(n, "1/1") or string.find(pN, "solo") or string.find(pN, "1/1")) and not string.find(n, "gui") then
-                soloTarget = v
-                break
+            local p = v.Parent and string.lower(v.Parent.Name) or ""
+            if textHasAny(n .. " " .. p, JOIN_KEYWORDS) and not string.find(n, "gui", 1, true) then
+                table.insert(found, v)
             end
         end
     end
+    return found
+end
 
-    if soloTarget then
-        hrp.CFrame = soloTarget.CFrame + Vector3.new(0, 3, 0)
-        local prompt = soloTarget:FindFirstChildWhichIsA("ProximityPrompt", true) or (soloTarget.Parent and soloTarget.Parent:FindFirstChildWhichIsA("ProximityPrompt", true))
-        if prompt then
-            fireproximityprompt(prompt)
+local function findJoinGuiButtons()
+    local found = {}
+    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+    if not pg then return found end
+    for _, v in ipairs(pg:GetDescendants()) do
+        if v:IsA("TextButton") or v:IsA("ImageButton") then
+            local t = string.lower(tostring(v.Text) .. " " .. tostring(v.Name))
+            if textHasAny(t, JOIN_KEYWORDS) then
+                table.insert(found, v)
+            end
         end
-        local touch = soloTarget:FindFirstChildWhichIsA("TouchTransmitter", true)
-        if touch then
-            firetouchinterest(hrp, soloTarget, 0)
-            task.wait(0.05)
-            firetouchinterest(hrp, soloTarget, 1)
+    end
+    return found
+end
+
+local function fireJoinRemotes()
+    local names = {"Play", "Start", "Join", "Solo", "Create", "QuickJoin", "StartGame", "JoinGame", "Enter", "Deploy"}
+    local function tryRemote(r)
+        if not r then return end
+        if r:IsA("RemoteEvent") then
+            pcall(function() r:FireServer() end)
+            pcall(function() r:FireServer(true) end)
+            pcall(function() r:FireServer("Solo") end)
+            pcall(function() r:FireServer(1) end)
+            pcall(function() r:FireServer({Solo = true}) end)
+        elseif r:IsA("RemoteFunction") then
+            pcall(function() r:InvokeServer() end)
+            pcall(function() r:InvokeServer(true) end)
+            pcall(function() r:InvokeServer("Solo") end)
+        end
+    end
+    for _, r in ipairs(ReplicatedStorage:GetDescendants()) do
+        if r:IsA("RemoteEvent") or r:IsA("RemoteFunction") then
+            local n = string.lower(r.Name)
+            for _, key in ipairs(names) do
+                if string.find(n, string.lower(key), 1, true) then
+                    tryRemote(r)
+                end
+            end
         end
     end
 end
 
-local function scanForSingleBond()
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj and obj.Parent then
-            local nameLower = string.lower(obj.Name)
-            if string.find(nameLower, "bond") then
-                local mainObj = obj
-                if obj:IsA("BasePart") and obj.Parent and obj.Parent:IsA("Model") and string.find(string.lower(obj.Parent.Name), "bond") then
-                    mainObj = obj.Parent
-                end
-                
-                local part = mainObj:IsA("BasePart") and mainObj or mainObj:FindFirstChildWhichIsA("BasePart", true)
-                if part then
-                    return mainObj, part
+local function enterSoloGame()
+    local hrp = getHRP()
+    for _, prompt in ipairs(findJoinPrompts()) do
+        if hrp and prompt.Parent then
+            local part = prompt.Parent:IsA("BasePart") and prompt.Parent or prompt.Parent:FindFirstChildWhichIsA("BasePart")
+            if part then
+                pcall(function() hrp.CFrame = part.CFrame + Vector3.new(0, 3, 0) end)
+            end
+        end
+        safeFirePrompt(prompt)
+        task.wait(0.15)
+    end
+    for _, part in ipairs(findJoinParts()) do
+        if hrp then
+            pcall(function() hrp.CFrame = part.CFrame + Vector3.new(0, 3, 0) end)
+            safeTouch(part)
+            local prompt = part:FindFirstChildWhichIsA("ProximityPrompt", true)
+                or (part.Parent and part.Parent:FindFirstChildWhichIsA("ProximityPrompt", true))
+            safeFirePrompt(prompt)
+        end
+        task.wait(0.1)
+    end
+    for _, btn in ipairs(findJoinGuiButtons()) do
+        clickGuiButton(btn)
+        task.wait(0.05)
+    end
+    fireJoinRemotes()
+end
+
+local function isBondObject(obj)
+    if not obj or not obj.Parent then return false end
+    local n = string.lower(obj.Name)
+    if textHasAny(n, BOND_KEYWORDS) then return true end
+    local ok, attrs = pcall(function()
+        return obj:GetAttributes()
+    end)
+    if ok and attrs then
+        for k, v in pairs(attrs) do
+            local blob = string.lower(tostring(k) .. " " .. tostring(v))
+            if textHasAny(blob, BOND_KEYWORDS) or textHasAny(blob, COLLECT_KEYWORDS) then
+                return true
+            end
+        end
+    end
+    local at = nil
+    pcall(function() at = obj:GetAttribute("ActivateText") end)
+    if at and (textHasAny(at, BOND_KEYWORDS) or textHasAny(at, COLLECT_KEYWORDS)) then
+        return true
+    end
+    return false
+end
+
+local function getBondPart(obj)
+    if obj:IsA("BasePart") then return obj end
+    if obj:IsA("Model") then
+        if obj.PrimaryPart then return obj.PrimaryPart end
+        return obj:FindFirstChildWhichIsA("BasePart", true)
+    end
+    return obj:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function scanAllBonds()
+    local list = {}
+    local folders = {
+        workspace:FindFirstChild("RuntimeItems"),
+        workspace:FindFirstChild("Items"),
+        workspace:FindFirstChild("Bonds"),
+        workspace:FindFirstChild("Pickups"),
+        workspace:FindFirstChild("Loot"),
+        workspace,
+    }
+    local seen = {}
+    for _, root in ipairs(folders) do
+        if root then
+            local ok, descs = pcall(function() return root:GetDescendants() end)
+            if ok then
+                for _, obj in ipairs(descs) do
+                    if isBondObject(obj) then
+                        local main = obj
+                        if obj:IsA("BasePart") and obj.Parent and obj.Parent:IsA("Model") and isBondObject(obj.Parent) then
+                            main = obj.Parent
+                        end
+                        if not seen[main] then
+                            local part = getBondPart(main)
+                            if part then
+                                seen[main] = true
+                                table.insert(list, {obj = main, part = part})
+                            end
+                        end
+                    end
                 end
             end
         end
     end
-    return nil, nil
+    return list
 end
 
-local function moveBondToPlayer(bondObj, bondPart)
-    local char = LocalPlayer.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-    
+local function fireCollectRemotes(target)
+    local keys = {"Activate", "Collect", "Pickup", "Interact", "Use", "Claim", "Loot", "Bond"}
+    for _, r in ipairs(ReplicatedStorage:GetDescendants()) do
+        if r:IsA("RemoteEvent") then
+            local n = string.lower(r.Name)
+            for _, k in ipairs(keys) do
+                if string.find(n, string.lower(k), 1, true) then
+                    pcall(function() r:FireServer(target) end)
+                    pcall(function() r:FireServer() end)
+                    pcall(function() r:FireServer(target, true) end)
+                end
+            end
+        end
+    end
+    pcall(function()
+        local shared = ReplicatedStorage:FindFirstChild("Shared")
+        local net = shared and shared:FindFirstChild("Network")
+        local rp = net and net:FindFirstChild("RemotePromise")
+        local rems = rp and rp:FindFirstChild("Remotes")
+        if rems then
+            for _, r in ipairs(rems:GetChildren()) do
+                if r:IsA("RemoteEvent") then
+                    local n = string.lower(r.Name)
+                    if string.find(n, "activate", 1, true) or string.find(n, "collect", 1, true) or string.find(n, "object", 1, true) then
+                        pcall(function() r:FireServer(target) end)
+                        pcall(function() r:FireServer() end)
+                    end
+                end
+            end
+        end
+    end)
+end
+
+local function collectOneBond(bondObj, bondPart)
+    local hrp = getHRP()
+    if not hrp or not bondPart or not bondPart.Parent then return false end
+    local beforeParent = bondObj.Parent
+
+    pcall(function()
+        hrp.CFrame = bondPart.CFrame + Vector3.new(0, 3, 0)
+    end)
+    task.wait(0.05)
+
     local cam = workspace.CurrentCamera
-    local targetPos = cam.CFrame.Position + (cam.CFrame.LookVector * 1.5)
-    local targetCFrame = CFrame.new(targetPos)
+    if cam then
+        local targetPos = cam.CFrame.Position + (cam.CFrame.LookVector * 1.5)
+        local targetCFrame = CFrame.new(targetPos)
+        pcall(function()
+            if bondObj:IsA("Model") then
+                bondObj:PivotTo(targetCFrame)
+            else
+                bondPart.CFrame = targetCFrame
+            end
+        end)
+        pcall(function()
+            bondPart.AssemblyLinearVelocity = Vector3.zero
+            bondPart.AssemblyAngularVelocity = Vector3.zero
+        end)
+    end
 
-    if bondObj:IsA("Model") then
-        bondObj:PivotTo(targetCFrame)
-    else
-        bondPart.CFrame = targetCFrame
+    local prompt = bondObj:FindFirstChildWhichIsA("ProximityPrompt", true)
+        or bondPart:FindFirstChildWhichIsA("ProximityPrompt", true)
+    safeFirePrompt(prompt)
+    safeTouch(bondPart)
+    fireCollectRemotes(bondObj)
+    fireCollectRemotes(bondPart)
+
+    task.wait(0.08)
+    if not bondObj.Parent or bondObj.Parent ~= beforeParent then
+        return true
     end
-    
-    bondPart.Velocity = Vector3.new(0, 0, 0)
-    bondPart.RotVelocity = Vector3.new(0, 0, 0)
-    
-    local prompt = bondObj:FindFirstChildWhichIsA("ProximityPrompt", true) or bondPart:FindFirstChildWhichIsA("ProximityPrompt", true)
-    if prompt then
-        fireproximityprompt(prompt)
+    return false
+end
+
+local function farmBondsPass()
+    local bonds = scanAllBonds()
+    if #bonds == 0 then
+        return 0
     end
-    
-    local touch = bondPart:FindFirstChildWhichIsA("TouchTransmitter", true)
-    if touch then
-        firetouchinterest(char.HumanoidRootPart, bondPart, 0)
-        task.wait(0.02)
-        firetouchinterest(char.HumanoidRootPart, bondPart, 1)
+    local got = 0
+    for _, b in ipairs(bonds) do
+        if isPlayerInLobby() then break end
+        if b.obj and b.obj.Parent and b.part and b.part.Parent then
+            local success = false
+            for _ = 1, 8 do
+                if not b.obj.Parent or isPlayerInLobby() then break end
+                if collectOneBond(b.obj, b.part) then
+                    success = true
+                    break
+                end
+                task.wait(0.04)
+            end
+            if success or not b.obj.Parent then
+                got += 1
+                bondCount += 1
+                BondsText.Text = string.format("Bonds: %02d", bondCount)
+            end
+        end
+        task.wait(0.05)
     end
+    return got
+end
+
+local function teleportLobby()
+    setStatus("Status: All Bonds Collected! Teleporting to the Lobby...")
+    isTimerRunning = false
+    task.wait(0.5)
+    pcall(function()
+        TeleportService:Teleport(TARGET_PLACE, LocalPlayer)
+    end)
+    local t = tick()
+    repeat
+        task.wait(0.5)
+    until isPlayerInLobby() or tick() - t > 25
 end
 
 local function startAutoFarm()
     while true do
-        task.wait(0.1)
-        if isPlayerInLobby() then
-            isTimerRunning = false
-            setStatus("Status: Joining the Game...")
-            enterSoloGame()
-            task.wait(2)
-        else
-            isTimerRunning = true
-            setStatus("Status: Getting All Bonds...")
-
-            local bondObj, bondPart = scanForSingleBond()
-
-            if bondObj and bondPart then
-                while bondObj and bondObj.Parent and not isPlayerInLobby() do
-                    moveBondToPlayer(bondObj, bondPart)
-                    task.wait(0.03)
-                end
-
-                if not (bondObj and bondObj.Parent) then
-                    bondCount = bondCount + 1
-                    BondsText.Text = string.format("Bonds: %02d", bondCount)
-                end
+        task.wait(0.15)
+        local ok, err = pcall(function()
+            if isPlayerInLobby() then
+                isTimerRunning = false
+                setStatus("Status: Joining the Game...")
+                enterSoloGame()
+                task.wait(1.2)
             else
-                local emptyScanCount = 0
-                for i = 1, 3 do
-                    task.wait(0.3)
-                    local checkObj, _ = scanForSingleBond()
-                    if not checkObj then
-                        emptyScanCount = emptyScanCount + 1
+                isTimerRunning = true
+                setStatus("Status: Getting All Bonds...")
+                local collected = farmBondsPass()
+                if collected == 0 then
+                    local empty = 0
+                    for _ = 1, 4 do
+                        task.wait(0.35)
+                        if isPlayerInLobby() then return end
+                        if #scanAllBonds() == 0 then
+                            empty += 1
+                        else
+                            empty = 0
+                            break
+                        end
+                    end
+                    if empty >= 4 and not isPlayerInLobby() then
+                        teleportLobby()
                     end
                 end
-
-                if emptyScanCount >= 3 and not isPlayerInLobby() then
-                    setStatus("Status: All Bonds Collected! Teleporting to the Lobby...")
-                    isTimerRunning = false
-                    task.wait(1)
-                    TeleportService:Teleport(116495829188952, LocalPlayer)
-                    
-                    repeat
-                        task.wait(0.5)
-                    until isPlayerInLobby()
-                end
             end
+        end)
+        if not ok then
+            setStatus("Status: Error, retrying...")
+            task.wait(1)
         end
     end
 end
