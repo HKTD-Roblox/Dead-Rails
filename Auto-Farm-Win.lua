@@ -1,745 +1,490 @@
 local CoreGui = game:GetService("CoreGui")
-
 if CoreGui:FindFirstChild("ToraScript") then
-    local CoreGui2 = game:GetService("CoreGui")
-    CoreGui2.ToraScript:Destroy()
+    CoreGui.ToraScript:Destroy()
+end
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+
+local LP = Players.LocalPlayer
+
+local function getChar()
+    return LP.Character or LP.CharacterAdded:Wait()
+end
+
+local function getHum(char)
+    char = char or getChar()
+    return char and char:FindFirstChildOfClass("Humanoid")
+end
+
+local function getHRP(char)
+    char = char or getChar()
+    return char and char:FindFirstChild("HumanoidRootPart")
 end
 
 local loadedFn = loadstring(game:HttpGet(
     "https://raw.githubusercontent.com/liebertsx/Tora-Library/main/src/librarynew",
     true
 ))()
+local win = loadedFn:CreateWindow("Dead Rails")
 
-local v = loadedFn:CreateWindow("Dead Rails")
+_G.Gun = false
+_G.Collect = false
+_G.Speed = false
+_G.FullBrightEnabled = false
+_G.FullBrightExecuted = false
+_G.InfJump = false
 
---==================================================
--- TP TO END
---==================================================
+local noclipConn = nil
+local infJumpConn = nil
+local countdownSec = 600
+local countdownLabel = nil
 
-v:AddButton({
-    text = "TP to End",
-    flag = "END",
-    callback = function()
-        local localPlayer = game.Players.LocalPlayer.Character
+local function gunAuraOnce()
+    local char = getChar()
+    if not char then return end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if not tool then return end
 
-        while true do
-            if not localPlayer:WaitForChild("Humanoid").Sit then
-                localPlayer:WaitForChild("HumanoidRootPart").CFrame =
-                    CFrame.new(-428.745911, 28.0728378, -49040.9062)
-
-                task.wait()
-            end
-        end
-    end,
-})
-
---==================================================
--- TP TO TRAIN
---==================================================
-
-v:AddButton({
-    text = "TP to Train",
-    flag = "Train",
-    callback = function(...)
-        local localPlayer = game.Players.LocalPlayer.Character
-
-        for _, v2 in pairs(workspace:GetChildren()) do
-            if v2:IsA("Model") and v2:GetAttribute("serverEntityId") then
-
-                for _, v4 in pairs(v2:GetDescendants()) do
-                    if v4.Name == "VehicleSeat" then
-
-                        while true do
-                            if not localPlayer:WaitForChild("Humanoid").Sit then
-                                localPlayer:WaitForChild("HumanoidRootPart").CFrame =
-                                    CFrame.new(v4.Position)
-
-                                task.wait()
-                            end
-                        end
-
+    local best, bestDist = nil, math.huge
+    for _, d in ipairs(Workspace:GetDescendants()) do
+        if d.Name == "HumanoidRootPart" and d.Parent and d:IsA("BasePart") then
+            local model = d.Parent
+            if model:GetAttribute("Bounty") and not model:GetAttribute("EntityName") then
+                local hum = model:FindFirstChildOfClass("Humanoid")
+                if hum and hum.Health > 0 then
+                    local dist = LP:DistanceFromCharacter(d.Position)
+                    if dist < bestDist then
+                        bestDist = dist
+                        best = d
                     end
                 end
-
             end
         end
-    end,
-})
-
---==================================================
--- GUN AURA
---==================================================
-
-v:AddToggle({
-    text = "Gun Aura (Kill Mobs)",
-    flag = "toggle",
-    state = false,
-    callback = function(p0)
-        _G.Gun = p0
-        print("Gun: ", p0)
-
-        if p0 then
-            Gun()
-        end
-    end,
-})
-
-Gun = function()
-    spawn(function()
-        _G.Gun = true
-
-        while true do
-            if _G.Gun then
-                wait()
-
-                pcall(function()
-                    local Players = game:GetService("Players")
-                    local _upv0 = Players.LocalPlayer
-
-                    func_b1b7f2ce()
-
-                    wait(0.2)
-                end)
-            end
-        end
-    end)
-end
-
---==================================================
--- COLLECT BOND & AMMO
---==================================================
-
-v:AddToggle({
-    text = "Collect Bond & Ammo",
-    flag = "toggle",
-    state = false,
-    callback = function(p0)
-        _G.Collect = p0
-        print("Collect: ", p0)
-
-        if p0 then
-            Collect()
-        end
-    end,
-})
-
-Collect = function()
-    spawn(function()
-        _G.Collect = true
-
-        while true do
-            if _G.Collect then
-                wait()
-
-                pcall(function(...)
-                    for _, v2 in pairs(workspace.RuntimeItems:GetChildren()) do
-
-                        if v2:GetAttribute("ActivateText") ~= "Collect Bond"
-                            and v2:GetAttribute("ActivateText") == "Collect" then
-
-                            local config = {}
-                            config[1] = v2
-
-                            local ReplicatedStorage =
-                                game:GetService("ReplicatedStorage")
-
-                            ReplicatedStorage.Shared.Network.RemotePromise.Remotes.C_ActivateObject:FireServer()
-                        end
-
-                        wait(1)
-
-                        return
-                    end
-                end)
-            end
-        end
-    end)
-end
-
---==================================================
--- WALK SPEED
---==================================================
-
-v:AddToggle({
-    text = "Walk Speed",
-    flag = "toggle",
-    state = false,
-
-    callback = function(p0)
-        _G.Speed = p0
-        print("Speed: ", p0)
-
-        local localPlayer = game.Players.LocalPlayer
-        local v
-
-        if localPlayer.Character then
-            v = localPlayer.Character:FindFirstChild("Humanoid")
-        end
-
-        if p0 then
-            _G.Speed = true
-
-            task.spawn(function()
-                while true do
-
-                    if _G.Speed then
-
-                        pcall(function()
-                            if v then
-                                v.WalkSpeed = 18.5
-                                workspace.CurrentCamera.FieldOfView = 100
-                            end
-                        end)
-
-                        task.wait(3)
-
-                        pcall(function()
-                            if v then
-                                v.WalkSpeed = 16
-                            end
-                        end)
-
-                        task.wait(1)
-                    end
-                end
-            end)
-
-        else
-            _G.Speed = false
-
-            pcall(function()
-                if v then
-                    v.WalkSpeed = 16
-                    workspace.CurrentCamera.FieldOfView = 70
-                end
-            end)
-        end
-    end,
-})
-
---==================================================
--- NOCLIP
---==================================================
-
-local v4 = nil
-local v5 = nil
-
-noclip = function(...)
-    v5 = false
-
-    local RunService = game:GetService("RunService")
-
-    v4 = RunService.Stepped:Connect(function(...)
-        if not v5 and game.Players.LocalPlayer.Character then
-
-            for _, v2 in pairs(
-                game.Players.LocalPlayer.Character:GetDescendants()
-            ) do
-
-                if v2:IsA("BasePart") and v2.CanCollide then
-                    v2.CanCollide = false
-                end
-
-            end
-        end
-
-        wait(0.21)
-    end)
-end
-
-clip = function(...)
-    if v4 then
-        v4:Disconnect()
     end
 
-    v5 = true
+    if not best then return end
+    local targetHum = best.Parent:FindFirstChildOfClass("Humanoid")
+    if not targetHum then return end
+
+    local shootRemote = ReplicatedStorage:FindFirstChild("Remotes")
+        and ReplicatedStorage.Remotes:FindFirstChild("Weapon")
+        and ReplicatedStorage.Remotes.Weapon:FindFirstChild("Shoot")
+    local reloadRemote = ReplicatedStorage:FindFirstChild("Remotes")
+        and ReplicatedStorage.Remotes:FindFirstChild("Weapon")
+        and ReplicatedStorage.Remotes.Weapon:FindFirstChild("Reload")
+
+    if shootRemote then
+        local hit = {
+            ["2"] = targetHum,
+            ["4"] = targetHum,
+        }
+        pcall(function()
+            shootRemote:FireServer(
+                Workspace:GetServerTimeNow(),
+                tool,
+                best.CFrame * CFrame.Angles(-1.794655442237854, 0.22748638689517975, 2.360928773880005),
+                hit
+            )
+        end)
+    end
+    if reloadRemote then
+        pcall(function()
+            reloadRemote:FireServer(Workspace:GetServerTimeNow(), tool)
+        end)
+    end
 end
 
-v:AddToggle({
-    text = "Noclip",
-    flag = "toggle_noclip",
-    state = false,
-
-    callback = function(p0)
-        if p0 then
-            noclip()
-        else
-            clip()
+local function startGun()
+    task.spawn(function()
+        while _G.Gun do
+            pcall(gunAuraOnce)
+            task.wait(0.2)
         end
-    end,
-})
+    end)
+end
 
---==================================================
--- UNLOCK CAM
---==================================================
-
-v:AddButton({
-    text = "UnlockCam",
-    flag = "button",
-
-    callback = function()
-        local _upv0 = game.Players.LocalPlayer
-        local _upv1 = workspace.CurrentCamera
-
-        func_2b6fb775()
-    end,
-})
-
---==================================================
--- FULL BRIGHT
---==================================================
-
-v:AddButton({
-    text = "FullBright",
-    flag = "button",
-
-    callback = function()
-
-        if not _G.FullBrightExecuted then
-
-            _G.FullBrightEnabled = false
-
-            local config = {}
-
-            local Lighting = game:GetService("Lighting")
-            config.Brightness = Lighting.Brightness
-
-            local Lighting2 = game:GetService("Lighting")
-            config.ClockTime = Lighting2.ClockTime
-
-            local Lighting3 = game:GetService("Lighting")
-            config.FogEnd = Lighting3.FogEnd
-
-            local Lighting4 = game:GetService("Lighting")
-            config.GlobalShadows = Lighting4.GlobalShadows
-
-            local Lighting5 = game:GetService("Lighting")
-            config.Ambient = Lighting5.Ambient
-
-            _G.NormalLightingSettings = config
-
-            local Lighting6 = game:GetService("Lighting")
-
-            Lighting6:GetPropertyChangedSignal("Brightness"):Connect(function()
-
-                local Lighting = game:GetService("Lighting")
-
-                if Lighting.Brightness ~= 1 then
-
-                    local Lighting2 = game:GetService("Lighting")
-
-                    if Lighting2.Brightness ~= _G.NormalLightingSettings.Brightness then
-
-                        local Lighting3 = game:GetService("Lighting")
-                        _G.NormalLightingSettings.Brightness =
-                            Lighting3.Brightness
-
-                        if not _G.FullBrightEnabled then
-                            repeat
-                                wait()
-                            until _G.FullBrightEnabled
-                        end
-
-                        local Lighting4 = game:GetService("Lighting")
-                        Lighting4.Brightness = 1
+local function startCollect()
+    task.spawn(function()
+        while _G.Collect do
+            pcall(function()
+                local folder = Workspace:FindFirstChild("RuntimeItems")
+                if not folder then return end
+                local remote = ReplicatedStorage:FindFirstChild("Shared")
+                    and ReplicatedStorage.Shared:FindFirstChild("Network")
+                    and ReplicatedStorage.Shared.Network:FindFirstChild("RemotePromise")
+                    and ReplicatedStorage.Shared.Network.RemotePromise:FindFirstChild("Remotes")
+                    and ReplicatedStorage.Shared.Network.RemotePromise.Remotes:FindFirstChild("C_ActivateObject")
+                if not remote then return end
+                for _, item in pairs(folder:GetChildren()) do
+                    if not _G.Collect then break end
+                    local text = item:GetAttribute("ActivateText")
+                    if text == "Collect" or text == "Collect Bond" then
+                        pcall(function()
+                            remote:FireServer(item)
+                        end)
+                        task.wait(0.15)
                     end
                 end
             end)
-
-            local Lighting7 = game:GetService("Lighting")
-
-            Lighting7:GetPropertyChangedSignal("ClockTime"):Connect(function()
-
-                local Lighting = game:GetService("Lighting")
-
-                if Lighting.ClockTime ~= 12 then
-
-                    local Lighting2 = game:GetService("Lighting")
-
-                    if Lighting2.ClockTime ~= _G.NormalLightingSettings.ClockTime then
-
-                        local Lighting3 = game:GetService("Lighting")
-                        _G.NormalLightingSettings.ClockTime =
-                            Lighting3.ClockTime
-
-                        if not _G.FullBrightEnabled then
-                            repeat
-                                wait()
-                            until _G.FullBrightEnabled
-                        end
-
-                        local Lighting4 = game:GetService("Lighting")
-                        Lighting4.ClockTime = 12
-                    end
-                end
-            end)
-
-            local Lighting8 = game:GetService("Lighting")
-
-            Lighting8:GetPropertyChangedSignal("FogEnd"):Connect(function()
-
-                local Lighting = game:GetService("Lighting")
-
-                if Lighting.FogEnd ~= 786543 then
-
-                    local Lighting2 = game:GetService("Lighting")
-
-                    if Lighting2.FogEnd ~= _G.NormalLightingSettings.FogEnd then
-
-                        local Lighting3 = game:GetService("Lighting")
-                        _G.NormalLightingSettings.FogEnd =
-                            Lighting3.FogEnd
-
-                        if not _G.FullBrightEnabled then
-                            repeat
-                                wait()
-                            until _G.FullBrightEnabled
-                        end
-
-                        local Lighting4 = game:GetService("Lighting")
-                        Lighting4.FogEnd = 786543
-                    end
-                end
-            end)
-
-            local Lighting9 = game:GetService("Lighting")
-
-            Lighting9:GetPropertyChangedSignal("GlobalShadows"):Connect(function()
-
-                local Lighting = game:GetService("Lighting")
-
-                if Lighting.GlobalShadows ~= false then
-
-                    local Lighting2 = game:GetService("Lighting")
-
-                    if Lighting2.GlobalShadows ~=
-                        _G.NormalLightingSettings.GlobalShadows then
-
-                        local Lighting3 = game:GetService("Lighting")
-                        _G.NormalLightingSettings.GlobalShadows =
-                            Lighting3.GlobalShadows
-
-                        if not _G.FullBrightEnabled then
-                            repeat
-                                wait()
-                            until _G.FullBrightEnabled
-                        end
-
-                        local Lighting4 = game:GetService("Lighting")
-                        Lighting4.GlobalShadows = false
-                    end
-                end
-            end)
-
-            local Lighting10 = game:GetService("Lighting")
-
-            Lighting10:GetPropertyChangedSignal("Ambient"):Connect(function()
-
-                local Lighting = game:GetService("Lighting")
-
-                if Lighting.Ambient ~= Color3.fromRGB(178, 178, 178) then
-
-                    local Lighting2 = game:GetService("Lighting")
-
-                    if Lighting2.Ambient ~=
-                        _G.NormalLightingSettings.Ambient then
-
-                        local Lighting3 = game:GetService("Lighting")
-                        _G.NormalLightingSettings.Ambient =
-                            Lighting3.Ambient
-
-                        if not _G.FullBrightEnabled then
-                            repeat
-                                wait()
-                            until _G.FullBrightEnabled
-                        end
-
-                        local Lighting4 = game:GetService("Lighting")
-                        Lighting4.Ambient =
-                            Color3.fromRGB(178, 178, 178)
-                    end
-                end
-            end)
-
-            local Lighting11 = game:GetService("Lighting")
-            Lighting11.Brightness = 1
-
-            local Lighting12 = game:GetService("Lighting")
-            Lighting12.ClockTime = 12
-
-            local Lighting13 = game:GetService("Lighting")
-            Lighting13.FogEnd = 786543
-
-            local Lighting14 = game:GetService("Lighting")
-            Lighting14.GlobalShadows = false
-
-            local Lighting15 = game:GetService("Lighting")
-            Lighting15.Ambient = Color3.fromRGB(178, 178, 178)
-
-            local _upv0 = true
-
-            spawn(function()
-
-                repeat
-                    wait()
-                until _G.FullBrightEnabled
-
-                while true do
-
-                    if not _G.FullBrightEnabled then
-
-                        local Lighting = game:GetService("Lighting")
-                        Lighting.Brightness =
-                            _G.NormalLightingSettings.Brightness
-
-                        local Lighting2 = game:GetService("Lighting")
-                        Lighting2.ClockTime =
-                            _G.NormalLightingSettings.ClockTime
-
-                        local Lighting3 = game:GetService("Lighting")
-                        Lighting3.FogEnd =
-                            _G.NormalLightingSettings.FogEnd
-
-                        local Lighting4 = game:GetService("Lighting")
-                        Lighting4.GlobalShadows =
-                            _G.NormalLightingSettings.GlobalShadows
-
-                        local Lighting5 = game:GetService("Lighting")
-                        Lighting5.Ambient =
-                            _G.NormalLightingSettings.Ambient
-
-                    else
-
-                        local Lighting6 = game:GetService("Lighting")
-                        Lighting6.Brightness = 1
-
-                        local Lighting7 = game:GetService("Lighting")
-                        Lighting7.ClockTime = 12
-
-                        local Lighting8 = game:GetService("Lighting")
-                        Lighting8.FogEnd = 786543
-
-                        local Lighting9 = game:GetService("Lighting")
-                        Lighting9.GlobalShadows = false
-
-                        local Lighting10 = game:GetService("Lighting")
-                        Lighting10.Ambient =
-                            Color3.fromRGB(178, 178, 178)
-                    end
-
-                    _upv0 = not _upv0
-                end
-            end)
+            task.wait(0.35)
         end
+    end)
+end
 
-        _G.FullBrightExecuted = false
+local function startSpeed()
+    task.spawn(function()
+        while _G.Speed do
+            pcall(function()
+                local hum = getHum()
+                if hum then
+                    hum.WalkSpeed = 18.5
+                    Workspace.CurrentCamera.FieldOfView = 100
+                end
+            end)
+            task.wait(3)
+            if not _G.Speed then break end
+            pcall(function()
+                local hum = getHum()
+                if hum then
+                    hum.WalkSpeed = 16
+                end
+            end)
+            task.wait(1)
+        end
+        pcall(function()
+            local hum = getHum()
+            if hum then
+                hum.WalkSpeed = 16
+            end
+            Workspace.CurrentCamera.FieldOfView = 70
+        end)
+    end)
+end
+
+local function enableNoclip()
+    if noclipConn then
+        noclipConn:Disconnect()
+        noclipConn = nil
+    end
+    noclipConn = RunService.Stepped:Connect(function()
+        local char = LP.Character
+        if not char then return end
+        for _, part in pairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end)
+end
+
+local function disableNoclip()
+    if noclipConn then
+        noclipConn:Disconnect()
+        noclipConn = nil
+    end
+    local char = LP.Character
+    if not char then return end
+    for _, part in pairs(char:GetDescendants()) do
+        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+            part.CanCollide = true
+        end
+    end
+end
+
+local function unlockCam()
+    pcall(function()
+        LP.CameraMode = Enum.CameraMode.Classic
+        LP.CameraMinZoomDistance = 0
+        LP.CameraMaxZoomDistance = 150
+        local hum = getHum()
+        if hum then
+            Workspace.CurrentCamera.CameraSubject = hum
+        end
+    end)
+end
+
+local function applyFullBright(on)
+    if on then
+        Lighting.Brightness = 1
+        Lighting.ClockTime = 12
+        Lighting.FogEnd = 786543
+        Lighting.GlobalShadows = false
+        Lighting.Ambient = Color3.fromRGB(178, 178, 178)
+    end
+end
+
+local function setupFullBright()
+    if _G.FullBrightExecuted then
         _G.FullBrightEnabled = not _G.FullBrightEnabled
-    end,
-})
+        applyFullBright(_G.FullBrightEnabled)
+        if not _G.FullBrightEnabled then
+            Lighting.Brightness = 1
+            Lighting.ClockTime = 14
+            Lighting.FogEnd = 100000
+            Lighting.GlobalShadows = true
+            Lighting.Ambient = Color3.fromRGB(128, 128, 128)
+        end
+        return
+    end
+    _G.FullBrightExecuted = true
+    _G.NormalLightingSettings = {
+        Brightness = Lighting.Brightness,
+        ClockTime = Lighting.ClockTime,
+        FogEnd = Lighting.FogEnd,
+        GlobalShadows = Lighting.GlobalShadows,
+        Ambient = Lighting.Ambient,
+    }
+    _G.FullBrightEnabled = true
+    applyFullBright(true)
+    Lighting:GetPropertyChangedSignal("Brightness"):Connect(function()
+        if _G.FullBrightEnabled and Lighting.Brightness ~= 1 then
+            Lighting.Brightness = 1
+        end
+    end)
+    Lighting:GetPropertyChangedSignal("ClockTime"):Connect(function()
+        if _G.FullBrightEnabled and Lighting.ClockTime ~= 12 then
+            Lighting.ClockTime = 12
+        end
+    end)
+    Lighting:GetPropertyChangedSignal("FogEnd"):Connect(function()
+        if _G.FullBrightEnabled and Lighting.FogEnd ~= 786543 then
+            Lighting.FogEnd = 786543
+        end
+    end)
+    Lighting:GetPropertyChangedSignal("GlobalShadows"):Connect(function()
+        if _G.FullBrightEnabled and Lighting.GlobalShadows ~= false then
+            Lighting.GlobalShadows = false
+        end
+    end)
+    Lighting:GetPropertyChangedSignal("Ambient"):Connect(function()
+        if _G.FullBrightEnabled and Lighting.Ambient ~= Color3.fromRGB(178, 178, 178) then
+            Lighting.Ambient = Color3.fromRGB(178, 178, 178)
+        end
+    end)
+end
 
---==================================================
--- INFINITE JUMP
---==================================================
+local function startCountdown()
+    task.spawn(function()
+        while countdownSec > 0 do
+            if countdownLabel and countdownLabel.Parent then
+                countdownLabel.Text = string.format(
+                    "%02d:%02d",
+                    math.floor(countdownSec / 60),
+                    countdownSec % 60
+                )
+            end
+            task.wait(1)
+            countdownSec = countdownSec - 1
+        end
+        if countdownLabel and countdownLabel.Parent then
+            countdownLabel.Text = "00:00"
+        end
+    end)
+end
 
-v:AddButton({
-    text = "Inf Jump",
-    flag = "button",
+local oldIndex
+pcall(function()
+    oldIndex = hookmetamethod(game, "__index", function(self, key)
+        if not checkcaller() then
+            local name = tostring(self)
+            if key == "Value" then
+                if name == "FireDelay" or name:find("FireDelay") then
+                    return 0
+                end
+                if name == "ReloadDuration" or name:find("ReloadDuration") then
+                    return 0
+                end
+                if name == "SpreadAngle" or name:find("SpreadAngle") then
+                    return 0
+                end
+                if name == "MagazineSize" or name:find("MagazineSize") then
+                    return math.huge
+                end
+            end
+        end
+        return oldIndex(self, key)
+    end)
+end)
 
+win:AddButton({
+    text = "Teleport to End",
+    flag = "btn_end",
     callback = function()
-        local UserInputService =
-            game:GetService("UserInputService")
-
-        UserInputService.JumpRequest:Connect(function()
-            game.Players.LocalPlayer.Character
-                :FindFirstChildOfClass("Humanoid")
-                :ChangeState("Jumping")
+        task.spawn(function()
+            local t = tick()
+            while tick() - t < 5 do
+                local hrp = getHRP()
+                local hum = getHum()
+                if hrp and hum and not hum.Sit then
+                    hrp.CFrame = CFrame.new(-428.745911, 28.0728378, -49040.9062)
+                end
+                task.wait()
+            end
         end)
     end,
 })
 
---==================================================
--- COUNTDOWN
---==================================================
-
-v:AddBox({
-    text = "Countdown",
-    flag = "box",
-    value = "Set Speed",
-
-    callback = function(p0)
+win:AddButton({
+    text = "Teleport to Train",
+    flag = "btn_train",
+    callback = function()
+        task.spawn(function()
+            local seat = nil
+            for _, model in pairs(Workspace:GetChildren()) do
+                if model:IsA("Model") and model:GetAttribute("serverEntityId") then
+                    for _, d in pairs(model:GetDescendants()) do
+                        if d.Name == "VehicleSeat" or d:IsA("VehicleSeat") then
+                            seat = d
+                            break
+                        end
+                    end
+                end
+                if seat then break end
+            end
+            if not seat then return end
+            local t = tick()
+            while tick() - t < 5 do
+                local hrp = getHRP()
+                local hum = getHum()
+                if hrp and hum and not hum.Sit then
+                    hrp.CFrame = CFrame.new(seat.Position)
+                end
+                task.wait()
+            end
+        end)
     end,
 })
 
-v:AddLabel({
+win:AddToggle({
+    text = "Gun Aura (Kill Mobs)",
+    flag = "toggle_gun",
+    state = false,
+    callback = function(on)
+        _G.Gun = on
+        if on then
+            startGun()
+        end
+    end,
+})
+
+win:AddToggle({
+    text = "Collect Bond & Ammo",
+    flag = "toggle_collect",
+    state = false,
+    callback = function(on)
+        _G.Collect = on
+        if on then
+            startCollect()
+        end
+    end,
+})
+
+win:AddToggle({
+    text = "Walk Speed",
+    flag = "toggle_speed",
+    state = false,
+    callback = function(on)
+        _G.Speed = on
+        if on then
+            startSpeed()
+        else
+            pcall(function()
+                local hum = getHum()
+                if hum then
+                    hum.WalkSpeed = 16
+                end
+                Workspace.CurrentCamera.FieldOfView = 70
+            end)
+        end
+    end,
+})
+
+win:AddToggle({
+    text = "Noclip",
+    flag = "toggle_noclip",
+    state = false,
+    callback = function(on)
+        if on then
+            enableNoclip()
+        else
+            disableNoclip()
+        end
+    end,
+})
+
+win:AddButton({
+    text = "UnlockCam",
+    flag = "btn_cam",
+    callback = function()
+        unlockCam()
+    end,
+})
+
+win:AddButton({
+    text = "FullBright",
+    flag = "btn_bright",
+    callback = function()
+        setupFullBright()
+    end,
+})
+
+win:AddButton({
+    text = "Inf Jump",
+    flag = "btn_jump",
+    callback = function()
+        if infJumpConn then
+            infJumpConn:Disconnect()
+            infJumpConn = nil
+            _G.InfJump = false
+            return
+        end
+        _G.InfJump = true
+        infJumpConn = UserInputService.JumpRequest:Connect(function()
+            if not _G.InfJump then return end
+            local hum = getHum()
+            if hum then
+                hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end)
+    end,
+})
+
+win:AddBox({
+    text = "Countdown",
+    flag = "box_countdown",
+    value = "600",
+    callback = function(val)
+        local n = tonumber(val)
+        if n and n > 0 then
+            countdownSec = math.floor(n)
+        end
+    end,
+})
+
+win:AddLabel({
     text = "Make by HKTD Roblox",
 })
 
---==================================================
--- INIT
---==================================================
-
 loadedFn:Init()
 
---==================================================
--- COUNTDOWN LOGIC
---==================================================
-
-local CoreGui3 = game:GetService("CoreGui")
-local _upv0 = 600
-local _upv1 = CoreGui3.ToraScript.ImageButton.Frame.Frame.TextBox
-
-func_cc7c4015()
-
---==================================================
--- WEAPON MODIFIER
---==================================================
-
-local _upv0 = nil
-
-local function func_cc7c4015()
-
-    while true do
-
-        if 0 < _upv0 then
-            _upv1.Text = string.format(
-                "%02d:%02d",
-                math.floor(_upv0 / 60),
-                _upv0 % 60
-            )
-
-            wait(1)
-
-            _upv0 = _upv0 - 1
-        end
-    end
-
-    _upv1.Text = "00:00"
-
-    return
-end
-
-local function func_aa65d143(p0, p1)
-
-    if not checkcaller() then
-
-        local v = tostring(p0)
-
-        if v == "FireDelay" and p1 == "Value" then
-            return 0
-        end
-
-        if v == "MagazineSize" and p1 == "Value" then
-            return math.huge
-        end
-
-        if v == "ReloadDuration" and p1 == "Value" then
-            return 0
-        end
-
-        if v == "SpreadAngle" and p1 == "Value" then
-            return 0
-        end
-    end
-
-    return _upv0
-end
-
---==================================================
--- GUN AURA LOGIC
---==================================================
-
-local function func_b1b7f2ce(...)
-
-    for _, v2 in ipairs(workspace:GetDescendants()) do
-
-        if v2.Name == "HumanoidRootPart" then
-
-            if not v2.Parent:GetAttribute("EntityName")
-                and v2.Name == "HumanoidRootPart"
-                and v2.Parent:GetAttribute("Bounty") then
-
-                local v3 = v2.Parent:FindFirstChild("Humanoid")
-
-                if v3 and 0 < v3.Health then
-
-                    local v4 =
-                        game.Players.LocalPlayer:
-                        DistanceFromCharacter(v2.Position)
-
-                    if v4 < math.huge then
-                        local v5 = v2
-                    end
-                end
+task.defer(function()
+    task.wait(0.5)
+    pcall(function()
+        local gui = CoreGui:FindFirstChild("ToraScript")
+        if gui then
+            local ib = gui:FindFirstChild("ImageButton")
+            local fr = ib and ib:FindFirstChild("Frame")
+            local fr2 = fr and fr:FindFirstChild("Frame")
+            local tb = fr2 and fr2:FindFirstChild("TextBox")
+            if tb then
+                countdownLabel = tb
+                startCountdown()
             end
-
-            if v5 then
-
-                local config = {}
-
-                config[1] = workspace:GetServerTimeNow()
-
-                config[2] =
-                    game.Players.LocalPlayer.Character:
-                    FindFirstChildOfClass("Tool")
-
-                config[3] =
-                    v5.CFrame *
-                    CFrame.Angles(
-                        -1.794655442237854,
-                        0.22748638689517975,
-                        2.360928773880005
-                    )
-
-                local config2 = {}
-
-                config2["4"] =
-                    v5.Parent:FindFirstChild("Humanoid")
-
-                config2["2"] =
-                    v5.Parent:FindFirstChild("Humanoid")
-
-                config[4] = config2
-
-                local ReplicatedStorage =
-                    game:GetService("ReplicatedStorage")
-
-                ReplicatedStorage.Remotes.Weapon.Shoot:FireServer()
-
-                local config3 = {}
-
-                config3[1] =
-                    workspace:GetServerTimeNow()
-
-                config3[2] =
-                    game.Players.LocalPlayer.Character:
-                    FindFirstChildOfClass("Tool")
-
-                local ReplicatedStorage2 =
-                    game:GetService("ReplicatedStorage")
-
-                ReplicatedStorage2.Remotes.Weapon.Reload:FireServer()
-            end
-
-            return v5
         end
-    end
-end
-
---==================================================
--- UNLOCK CAM LOGIC
---==================================================
-
-local function func_2b6fb775()
-
-    local _upv0 = game.Players.LocalPlayer
-    local _upv1 = workspace.CurrentCamera
-
-    _upv0.CameraMode = Enum.CameraMode.Classic
-    _upv0.CameraMinZoomDistance = 0
-    _upv0.CameraMaxZoomDistance = 150
-    _upv1.CameraSubject = _upv0.Character.Humanoid
-
-    return
-end
-
-return
+    end)
+end)
