@@ -112,3 +112,7 @@ Window:AddButton({
         end
     end,
 })
+
+v:AddLabel({
+    text = "Make by HKTD Roblox",
+})
