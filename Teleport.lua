@@ -8,7 +8,7 @@ if CoreGui:FindFirstChild("ToraScript") then
 end
 
 local loadedFn = loadstring(game:HttpGet("https://raw.githubusercontent.com/liebertsx/Tora-Library/main/src/librarynew", true))()
-local Window = loadedFn:CreateWindow("Teleport Dead Rails")
+local Window = loadedFn:CreateWindow("Dead Rails - Teleport")
 
 local function getCharacter()
     local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
