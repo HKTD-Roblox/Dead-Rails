@@ -10,12 +10,16 @@ if CoreGui:FindFirstChild("ToraScript") then
     CoreGui.ToraScript:Destroy()
 end
 
+-- Reset trạng thái biến về Off khi mới bật
+_G.Gun = false
+_G.Collect = false
+_G.UnlockCam = false
+
 -- Tải UI Library
 local loadedFn = loadstring(game:HttpGet("https://raw.githubusercontent.com/liebertsx/Tora-Library/main/src/librarynew", true))()
 local Window = loadedFn:CreateWindow("Dead Rails")
 
 local noclipConnection = nil
-local infJumpConnection = nil
 
 -- Hàm hỗ trợ lấy Character
 local function getCharacter()
@@ -58,7 +62,7 @@ Window:AddButton({
 })
 
 ---------------------------------------------------------
--- TOGGLES
+-- TOGGLES (MẶC ĐỊNH OFF)
 ---------------------------------------------------------
 
 -- 1. Gun Aura Toggle
@@ -130,14 +134,14 @@ Window:AddToggle({
     flag = "toggle_cam",
     state = false,
     callback = function(state)
+        _G.UnlockCam = state
         if state then
+            LocalPlayer.DevCameraOcclusionMode = Enum.DevCameraOcclusionMode.Invisicam
             LocalPlayer.CameraMode = Enum.CameraMode.Classic
-            LocalPlayer.CameraMinZoomDistance = 0
-            LocalPlayer.CameraMaxZoomDistance = 150
-            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                workspace.CurrentCamera.CameraSubject = LocalPlayer.Character.Humanoid
-            end
+            LocalPlayer.CameraMinZoomDistance = 0.5
+            LocalPlayer.CameraMaxZoomDistance = 500
         else
+            LocalPlayer.DevCameraOcclusionMode = Enum.DevCameraOcclusionMode.Zoom
             LocalPlayer.CameraMode = Enum.CameraMode.Classic
             LocalPlayer.CameraMinZoomDistance = 0.5
             LocalPlayer.CameraMaxZoomDistance = 12.5
@@ -145,52 +149,7 @@ Window:AddToggle({
     end,
 })
 
--- 4. Inf Jump Toggle
-Window:AddToggle({
-    text = "Inf Jump",
-    flag = "toggle_infjump",
-    state = false,
-    callback = function(state)
-        if state then
-            infJumpConnection = UserInputService.JumpRequest:Connect(function()
-                local _, _, hum = getCharacter()
-                if hum then
-                    hum:ChangeState(Enum.HumanoidStateType.Jumping)
-                end
-            end)
-        else
-            if infJumpConnection then
-                infJumpConnection:Disconnect()
-                infJumpConnection = nil
-            end
-        end
-    end,
-})
-
--- 5. Walk Speed Toggle
-Window:AddToggle({
-    text = "Walk Speed",
-    flag = "toggle_speed",
-    state = false,
-    callback = function(state)
-        _G.Speed = state
-        task.spawn(function()
-            while _G.Speed do
-                local _, _, hum = getCharacter()
-                if hum then
-                    hum.WalkSpeed = 25
-                end
-                task.wait(0.1)
-            end
-            local _, _, hum = getCharacter()
-            if hum then
-                hum.WalkSpeed = 16
-            end
-        end)
-    end,
-})
-
--- 6. Noclip Toggle
+-- 4. Noclip Toggle
 Window:AddToggle({
     text = "Noclip",
     flag = "toggle_noclip",
@@ -216,23 +175,53 @@ Window:AddToggle({
 })
 
 ---------------------------------------------------------
--- COUNTDOWN SECTION (Đếm ngược 10:00)
+-- COUNTDOWN BOX (KHÓA TƯƠNG TÁC TẠO HIỆU ỨNG READ-ONLY)
 ---------------------------------------------------------
 
-local countdownLabel = Window:AddLabel({
-    text = "Countdown: 10:00",
+local countdownBox = Window:AddBox({
+    text = "Countdown",
+    value = "10:00",
+    callback = function() end,
 })
 
+-- Khóa cứng tương tác ngay sau khi khởi tạo Box
+task.spawn(function()
+    task.wait(0.1)
+    local toraGui = CoreGui:FindFirstChild("ToraScript")
+    if toraGui then
+        for _, obj in ipairs(toraGui:GetDescendants()) do
+            if obj:IsA("TextBox") then
+                obj.TextEditable = false
+                obj.ClearTextOnFocus = false
+                obj.Active = false
+            end
+        end
+    end
+end)
+
+-- Luồng đếm ngược
 task.spawn(function()
     local timeLeft = 600
     while timeLeft > 0 do
         local mins = math.floor(timeLeft / 60)
         local secs = timeLeft % 60
-        countdownLabel:Set(string.format("Countdown: %02d:%02d", mins, secs))
+        local strTime = string.format("%02d:%02d", mins, secs)
+        
+        pcall(function()
+            if countdownBox and countdownBox.Set then
+                countdownBox:Set(strTime)
+            end
+        end)
+
         task.wait(1)
         timeLeft = timeLeft - 1
     end
-    countdownLabel:Set("Time's Up!")
+
+    pcall(function()
+        if countdownBox and countdownBox.Set then
+            countdownBox:Set("Time's Up!")
+        end
+    end)
 end)
 
 ---------------------------------------------------------
