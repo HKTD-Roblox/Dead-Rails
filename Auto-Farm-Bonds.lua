@@ -286,12 +286,9 @@ local JOIN_KEYWORDS = {
     "create", "quick", "match", "deploy", "embark", "board", "enter"
 }
 
+-- CHỈ GIỮ LẠI TỪ KHÓA LIÊN QUAN ĐẾN BONDS (ĐÃ LỌC BỎ CHUNG CHUNG)
 local BOND_KEYWORDS = {
     "bond", "bonds", "cashbond", "bondpickup", "bonditem", "collectbond"
-}
-
-local COLLECT_KEYWORDS = {
-    "collect", "pick", "take", "grab", "loot", "claim"
 }
 
 local function textHasAny(str, list)
@@ -483,24 +480,25 @@ local function enterSoloGame()
     fireJoinRemotes()
 end
 
+-- LỌC CHÍNH XÁC CHỈ LẤY BONDS (BỎ QUA AMMO)
 local function isBondObject(obj)
     if not obj or not obj.Parent then return false end
     local n = string.lower(obj.Name)
     if textHasAny(n, BOND_KEYWORDS) then return true end
-    local ok, attrs = pcall(function()
-        return obj:GetAttributes()
-    end)
+    
+    local ok, attrs = pcall(function() return obj:GetAttributes() end)
     if ok and attrs then
         for k, v in pairs(attrs) do
             local blob = string.lower(tostring(k) .. " " .. tostring(v))
-            if textHasAny(blob, BOND_KEYWORDS) or textHasAny(blob, COLLECT_KEYWORDS) then
+            if textHasAny(blob, BOND_KEYWORDS) then
                 return true
             end
         end
     end
+    
     local at = nil
     pcall(function() at = obj:GetAttribute("ActivateText") end)
-    if at and (textHasAny(at, BOND_KEYWORDS) or textHasAny(at, COLLECT_KEYWORDS)) then
+    if at and (string.lower(tostring(at)) == "collect bond" or textHasAny(at, BOND_KEYWORDS)) then
         return true
     end
     return false
@@ -584,33 +582,33 @@ local function fireCollectRemotes(target)
     end)
 end
 
+-- LOGIC MỚI: DỊCH CHUYỂN BOND VỀ TRƯỚC MẶT PLAYER
 local function collectOneBond(bondObj, bondPart)
     local hrp = getHRP()
     if not hrp or not bondPart or not bondPart.Parent then return false end
     local beforeParent = bondObj.Parent
 
+    -- TÍNH TOÁN VỊ TRÍ TRƯỚC MẶT PLAYER (Cách 3 studs)
+    local targetCFrame = hrp.CFrame * CFrame.new(0, 0, -3)
+
+    -- Dịch chuyển Bond đến vị trí tính toán
     pcall(function()
-        hrp.CFrame = bondPart.CFrame + Vector3.new(0, 3, 0)
+        if bondObj:IsA("Model") then
+            bondObj:PivotTo(targetCFrame)
+        else
+            bondPart.CFrame = targetCFrame
+        end
     end)
-    task.wait(0.05)
 
-    local cam = workspace.CurrentCamera
-    if cam then
-        local targetPos = cam.CFrame.Position + (cam.CFrame.LookVector * 1.5)
-        local targetCFrame = CFrame.new(targetPos)
-        pcall(function()
-            if bondObj:IsA("Model") then
-                bondObj:PivotTo(targetCFrame)
-            else
-                bondPart.CFrame = targetCFrame
-            end
-        end)
-        pcall(function()
-            bondPart.AssemblyLinearVelocity = Vector3.zero
-            bondPart.AssemblyAngularVelocity = Vector3.zero
-        end)
-    end
+    -- Triệt tiêu lực vật lý tránh làm Bond rơi lung tung
+    pcall(function()
+        bondPart.AssemblyLinearVelocity = Vector3.zero
+        bondPart.AssemblyAngularVelocity = Vector3.zero
+    end)
 
+    task.wait(0.03)
+
+    -- Gửi các tín hiệu tương tác nhặt đồ
     local prompt = bondObj:FindFirstChildWhichIsA("ProximityPrompt", true)
         or bondPart:FindFirstChildWhichIsA("ProximityPrompt", true)
     safeFirePrompt(prompt)
@@ -618,7 +616,7 @@ local function collectOneBond(bondObj, bondPart)
     fireCollectRemotes(bondObj)
     fireCollectRemotes(bondPart)
 
-    task.wait(0.08)
+    task.wait(0.05)
     if not bondObj.Parent or bondObj.Parent ~= beforeParent then
         return true
     end
@@ -635,13 +633,13 @@ local function farmBondsPass()
         if isPlayerInLobby() then break end
         if b.obj and b.obj.Parent and b.part and b.part.Parent then
             local success = false
-            for _ = 1, 8 do
+            for _ = 1, 6 do
                 if not b.obj.Parent or isPlayerInLobby() then break end
                 if collectOneBond(b.obj, b.part) then
                     success = true
                     break
                 end
-                task.wait(0.04)
+                task.wait(0.03)
             end
             if success or not b.obj.Parent then
                 got += 1
@@ -649,7 +647,7 @@ local function farmBondsPass()
                 BondsText.Text = string.format("Bonds: %02d", bondCount)
             end
         end
-        task.wait(0.05)
+        task.wait(0.03)
     end
     return got
 end
